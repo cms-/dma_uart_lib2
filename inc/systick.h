@@ -96,7 +96,7 @@ void static qtx_manager(fifo_t *fifo);
 
 void static dummy_event(void *foo);
 
-void static test_event(void);
+void static test_event(void *foo);
 
 #define SYSTICK_H 1
 #endif

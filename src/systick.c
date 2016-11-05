@@ -4,7 +4,7 @@
 #define NUMEVENTS 1
 
 fifo_t SerTXFifo[1];
-uint32_t SerTXBuffer[TXBUFFERSIZE];
+uint8_t SerTXBuffer[TXBUFFERSIZE];
 int32_t SerTXDMA;
 int32_t SerTXSize;
 uint32_t TheTime = 0;
@@ -37,7 +37,7 @@ void static test_event(void *foo)
 	gpio_toggle(GPIOA, GPIO10); /* LED2 on/off */
 }
 
-void static dummy_event(void)
+void static dummy_event(void *foo)
 {
 	int j;
 	for (j=0; j<1000; j++);
@@ -109,7 +109,7 @@ void Sys_AddPeriodicEvent(void(*function)(void*), uint32_t period_ms, fifo_t *fi
 	{
 		if (!events[j].function)
 		{
-			events[j].function = function;
+			events[j].function = (function);
 			events[j].interval = period_ms;
 			events[j].last = 0;
 			events[j].fifo = fifo;
@@ -137,12 +137,12 @@ void static run_periodic_events(void)
 	cm_enable_interrupts();
 }
 
-void FifoInit(fifo_t *fifo, uint32_t *data, uint32_t size, int32_t *dma_flag, int32_t *size_flag)
+void FifoInit(fifo_t *fifo, uint8_t *data, uint32_t size, int32_t *dma_flag, int32_t *size_flag)
 {
-	fifo->getPt = (uint32_t*) data[0];
-	fifo->putPt = (uint32_t*) data[0];
+	fifo->getPt = (uint32_t*) &data[0];
+	fifo->putPt = (uint32_t*) &data[0];
 	fifo->size = size;
-	fifo->data = (uint32_t*) data;
+	fifo->data = (uint32_t*) &data;
 	fifo->dma_flag = dma_flag;
 	fifo->size_flag = size_flag;
 
@@ -150,19 +150,19 @@ void FifoInit(fifo_t *fifo, uint32_t *data, uint32_t size, int32_t *dma_flag, in
 
 // ******* FifoPut *******
 // Appends a word of data to the global FIFO
-// Inputs: pointer to data
-// Outputs: x insertions for success, 0 for fail/full
+// Inputs: pointer to a 32 bit word 
+// Outputs: 0 for success
 uint32_t FifoPut(volatile void *data, fifo_t *fifo, uint32_t length)
 {
 	cm_disable_interrupts();
 	int j;
-	volatile char *p;
-	p = volatile data;
+	char *p;
+	p = data;
 	for (j=0; j < length; j++)
 	{
 		// Check to see if there's space in the buffer
 		if ( (fifo->putPt + 1 == fifo->getPt) ||
-			( (fifo->putPt + 1 == &fifo->data[-1]) && (fifo->getPt == &fifo->data[0]) ) )
+			( (fifo->putPt + 1 == &fifo->data[-1]) && (fifo->getPt == &fifo->data[0]) ))
 		{
 			//gpio_toggle(GPIOA, GPIO10); /* LED2 on/off */
 			cm_enable_interrupts();
@@ -176,7 +176,7 @@ uint32_t FifoPut(volatile void *data, fifo_t *fifo, uint32_t length)
 			fifo->putPt++; // advance to next buffer slot
 			if ( fifo->putPt == &fifo->data[-1] )
 			{
-				fifo->putPt = &fifo->data[0];
+				fifo->putPt = (uint32_t*) fifo->data[0];
 			}
 
 		}
@@ -194,25 +194,25 @@ uint32_t FifoPeek(void *data, fifo_t *fifo, uint32_t length)
 	cm_disable_interrupts();
 	uint32_t j;
 	char *p;
-	uint32_t tmpTail;
-	tmpTail = fifo->tail;
+	uint32_t *tmpGet;
+	tmpGet = (uint32_t*) fifo->getPt;
 	p = data;
 
 	for (j=0; j < length; j++) {
 		
-		if (tmpTail != fifo->head)
+		if (tmpGet != (uint32_t*)&fifo->putPt)
 		//if (fifo->tail != fifo->head)
 		{
-			*p++ = fifo->data[tmpTail];
+			*p++ = (*tmpGet);
 			//*p++ = fifo->data[fifo->tail];
 			//uart_qtx_dma(fifo->data[fifo->tail], sizeof(fifo->data[fifo->tail]));
 			
-			tmpTail++;
+			tmpGet++;
 			//fifo->tail++;
-			if (tmpTail == fifo->size)
+			if (tmpGet == &fifo->data[-1])
 			//if (fifo->tail == fifo->size)
 			{
-				tmpTail = 0;
+				tmpGet = (uint32_t*) &fifo->data[0];
 			}
 
 		}
@@ -233,11 +233,6 @@ uint32_t FifoPeek(void *data, fifo_t *fifo, uint32_t length)
 void FifoDelete(fifo_t *fifo, uint32_t length) 
 {
 	cm_disable_interrupts();
-	fifo->tail = fifo->tail + length;
-	if (fifo->size <= fifo->tail)
-	{
-		fifo->tail = fifo->size - length;
-	}
 	//return 0;
 	cm_enable_interrupts();
 }
@@ -250,26 +245,26 @@ uint32_t FifoGet(volatile void *data, fifo_t *fifo, uint32_t length)
 	cm_disable_interrupts();
 	uint32_t j;
 	char *p;
-	uint32_t tmpTail;
-	tmpTail = fifo->tail;
+	uint32_t *tmpGet;
+	tmpGet = (uint32_t*) fifo->getPt;
 	p = data;
 
 	for (j=0; j < length; j++) {
 		
 		//if (tmpTail != fifo->head)
-		if (fifo->tail != fifo->head)
+		if (fifo->getPt != fifo->putPt)
 		{
 			//*p++ = fifo->data[tmpTail];
-			*p++ = fifo->data[fifo->tail];
+			*p++ = (*fifo->getPt);
 			//uart_qtx_dma(fifo->data[fifo->tail], sizeof(fifo->data[fifo->tail]));
 			
 			//tmpTail++;
-			fifo->tail++;
+			fifo->getPt++;
 			Sys_Wait(fifo->size_flag);
 			//if (tmpTail == fifo->size)
-			if (fifo->tail == fifo->size)
+			if (fifo->getPt == (uint32_t*)&fifo->data[-1])
 			{
-				tmpTail = 0;
+				fifo->getPt = (uint32_t*)&fifo->data[0];
 			}
 
 		}
