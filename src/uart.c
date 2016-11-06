@@ -8,9 +8,9 @@
 //         number of 8 bit values to be read from data pointer
 // Ouputs: none
 void Uart_send(volatile void* data, int length) {
-
+	//while (!SerTXFifo->dma_flag);
 	FifoPut(data, SerTXFifo, length);
-	
+
 }
 
 // ******* uart_qtx *******
@@ -101,7 +101,7 @@ void dma1_channel2_3_isr(void) {
 	{
 		DMA1_IFCR |= DMA_IFCR_CTCIF2;	//Clear flag
 		Sys_Signal(SerTXFifo->dma_flag);
-		gpio_toggle(GPIOA, GPIO10); /* LED2 on/off */
+		//gpio_toggle(GPIOA, GPIO10); /* LED2 on/off */
 	}
 	
 	//DMA1_IFCR |= DMA_IFCR_CTCIF3;

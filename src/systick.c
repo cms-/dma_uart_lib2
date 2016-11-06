@@ -26,6 +26,7 @@ void static qtx_manager(fifo_t *fifo)
 	if ((len = FifoGet(&buf, fifo, 1)))
 	{
 		Sys_Wait(fifo->dma_flag);
+		//gpio_toggle(GPIOA, GPIO10); /* LED2 on/off */
 		uart_qtx_dma(&buf, len); // fold this into fifo block
 		
 		//FifoDelete(fifo, 1);
@@ -57,7 +58,7 @@ void Systick_Init(void) {
 	Sys_InitSema(&SerTXDMA, 1);
 	Sys_InitSema(&SerTXSize, 0);
 	FifoInit(SerTXFifo, BUFFERSIZE, &SerTXDMA, &SerTXSize);
-	Sys_AddPeriodicEvent(&dummy_event, 1000, SerTXFifo);
+	Sys_AddPeriodicEvent(&qtx_manager, 5, SerTXFifo);
 	//Sys_AddPeriodicEvent(&dummy_event, 100000, &tmp, &tmp);
 }
 
@@ -167,20 +168,23 @@ uint32_t FifoPut(volatile void *data, fifo_t *fifo, uint32_t length)
 		// Check to see if there's space in the buffer
 		// full if advancing the putPt to the next element in the buffer is met with the getPt
 		// also check for this condition when we reach the buffer length.
-		if ((nextPutPt == &fifo->getPt) || ((nextPutPt == &fifo->data[fifo->size]) && (fifo->getPt == &fifo->data[0])))
+		if (nextPutPt == &fifo->data[fifo->size]) 
 		{
-			//gpio_toggle(GPIOA, GPIO10); // LED2 on/off 
+			nextPutPt = &fifo->data[0];
+		}
+		if (nextPutPt == &fifo->getPt)
+		{
 			cm_enable_interrupts();
 			return j; // no room left, return number of chars fetched
 		}
-		
-			(*fifo->putPt) = *p++;
-			Sys_Signal(fifo->size_flag);
-			//(*p)++;
-			fifo->putPt = &fifo->putPt[1]; // advance to next buffer byte
 
-			// if we reach the buffer size, then wrap the putPt
-			if (fifo->putPt == &fifo->data[fifo->size])
+		(*fifo->putPt) = *p++;
+		Sys_Signal(&fifo->size_flag);
+		//(*p)++;
+		fifo->putPt = &fifo->putPt[1]; // advance to next buffer byte
+
+		// if we reach the buffer size, then wrap the putPt
+		if (fifo->putPt == &fifo->data[fifo->size])
 			{
 				//gpio_set(GPIOA, GPIO10);
 				fifo->putPt = &fifo->data[0];
@@ -250,8 +254,8 @@ uint32_t FifoGet(volatile void *data, fifo_t *fifo, uint32_t length)
 	cm_disable_interrupts();
 	uint32_t j;
 	char *p;
-	uint32_t *tmpGet;
-	tmpGet = (uint32_t*) fifo->getPt;
+	//uint32_t *tmpGet;
+	//tmpGet = (uint32_t*) fifo->getPt;
 	p = data;
 
 	for (j=0; j < length; j++) {
@@ -264,12 +268,12 @@ uint32_t FifoGet(volatile void *data, fifo_t *fifo, uint32_t length)
 			//uart_qtx_dma(fifo->data[fifo->tail], sizeof(fifo->data[fifo->tail]));
 			
 			//tmpTail++;
-			fifo->getPt++;
-			Sys_Wait(fifo->size_flag);
+			fifo->getPt = &fifo->getPt[1];
+			Sys_Wait(&fifo->size_flag);
 			//if (tmpTail == fifo->size)
-			if (fifo->getPt == (uint32_t*)&fifo->data[-1])
+			if (fifo->getPt == &fifo->data[fifo->size])
 			{
-				fifo->getPt = (uint32_t*)&fifo->data[0];
+				fifo->getPt = &fifo->data[0];
 			}
 
 		}
