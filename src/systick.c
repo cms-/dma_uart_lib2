@@ -164,19 +164,31 @@ uint32_t FifoPut(volatile void *data, fifo_t *fifo, uint32_t length)
 	for (j=0; j < length; j++)
 	{
 		// testing for end of buffer
-		if (nextPutPt == &fifo->data[fifo->size])
+		// Check to see if there's space in the buffer
+		// full if advancing the putPt to the next element in the buffer is met with the getPt
+		// also check for this condition when we reach the buffer length.
+		if ((nextPutPt == &fifo->getPt) || ((nextPutPt == &fifo->data[fifo->size]) && (fifo->getPt == &fifo->data[0])))
 		{
-			gpio_set(GPIOA, GPIO10); /* LED2 on/off */
-			return j;
+			//gpio_toggle(GPIOA, GPIO10); // LED2 on/off 
+			cm_enable_interrupts();
+			return j; // no room left, return number of chars fetched
 		}
+		
 			(*fifo->putPt) = *p++;
 			Sys_Signal(fifo->size_flag);
 			//(*p)++;
-			fifo->putPt++; // advance to next buffer slot
+			fifo->putPt = &fifo->putPt[1]; // advance to next buffer byte
+
+			// if we reach the buffer size, then wrap the putPt
+			if (fifo->putPt == &fifo->data[fifo->size])
+			{
+				//gpio_set(GPIOA, GPIO10);
+				fifo->putPt = &fifo->data[0];
+			}
 		
 	}
 	cm_enable_interrupts();
-	return j;
+	return j; // return number of chars added to the buffer
 }
 
 // ******* FifoPeek *******

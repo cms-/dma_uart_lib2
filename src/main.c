@@ -15,18 +15,18 @@ int main(void)
 	uart_init();
 	dma_init();
 	Systick_Init();
-	//Uart_send("Hello",5);
-	
-	for (i=0; i<511; i++)
+	Uart_send("Hello",5);
+	/*
+	for (i=0; i<555555555; i++)
 	{
 		//for (j=0; j<10000; j++);
 		Uart_send("H", 1);	
 	} // delay
-	
+	*/
 	while (1) {
 
-		//gpio_toggle(PORT_LED, PIN_LED);	/* LED on/off */
-		
+		gpio_toggle(PORT_LED, PIN_LED);	/* LED on/off */
+		for (j=0; j<1000000; j++);
 		
 		//usart_send_blocking(USART2, 'D');
 		//uart_send("Hello World!", 12);
