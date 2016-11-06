@@ -5,8 +5,11 @@
 #include <libopencm3/stm32/gpio.h>
 #include <libopencm3/cm3/cortex.h>
 
+#define BUFFERSIZE 512
+extern int32_t SerTXSize;
+extern int32_t SerTXDMA;
 typedef struct {
-	uint32_t *data;
+	uint32_t data[BUFFERSIZE];
 	uint32_t *getPt;
 	uint32_t *putPt;
 	uint32_t size;
@@ -14,11 +17,7 @@ typedef struct {
 	int32_t *size_flag;
 	void (*handler_function)(void *data, uint32_t length);
 } fifo_t;
-
-#define TXBUFFERSIZE 512
 extern fifo_t SerTXFifo[1];
-extern int32_t SerTXSize;
-extern int32_t SerTXDMA;
 
 // Buffer management event table
 struct event_t {
@@ -65,7 +64,7 @@ void Sys_AddPeriodicEvent(void(*function)(void*), uint32_t period_ms, fifo_t *fi
 // Inputs/Outputs: none
 void static run_periodic_events(void);
 
-void FifoInit(fifo_t *fifo, uint8_t *data, uint32_t size, int32_t *dma_flag, int32_t *size_flag);
+void FifoInit(fifo_t *fifo, uint32_t size, int32_t *dma_flag, int32_t *size_flag);
 
 // ******* FifoPut *******
 // Appends a word of data to the global FIFO
