@@ -1,12 +1,19 @@
 #include "systick.h"
 #include "uart.h"
 
-#define NUMEVENTS 1
+#define NUMEVENTS 2
 
-fifo_t SerTXFifo[1];
+int32_t SerTXIRQ;
+int32_t SerRXIRQ;
 //uint32_t SerTXBuffer[TXBUFFERSIZE];
 int32_t SerTXDMA;
 int32_t SerTXSize;
+int32_t SerTXIRQ;
+
+int32_t SerRXSize;
+int32_t SerRXDMA;
+int32_t SerRXIRQ;
+
 uint32_t TheTime = 0;
 
 eventType events[NUMEVENTS];
@@ -25,7 +32,7 @@ void static qtx_manager(fifo_t *fifo)
 	
 	if ((len = FifoGet(&buf, fifo, 1)))
 	{
-		Sys_Wait(fifo->dma_flag);
+		Sys_Wait(&fifo->dma_flag);
 		//gpio_toggle(GPIOA, GPIO10); /* LED2 on/off */
 		uart_qtx_dma(&buf, len); // fold this into fifo block
 		
@@ -58,7 +65,8 @@ void Systick_Init(void) {
 	Sys_InitSema(&SerTXDMA, 1);
 	Sys_InitSema(&SerTXSize, 0);
 	FifoInit(SerTXFifo, BUFFERSIZE, &SerTXDMA, &SerTXSize);
-	Sys_AddPeriodicEvent(&qtx_manager, 5, SerTXFifo);
+	Sys_AddPeriodicEvent(&qtx_manager, 1000, SerTXFifo);
+	//Sys_AddPeriodicEvent(&test_event, 1000, SerTXFifo);
 	//Sys_AddPeriodicEvent(&dummy_event, 100000, &tmp, &tmp);
 }
 
@@ -128,8 +136,10 @@ void static run_periodic_events(void)
 	int j;
 	for (j=0; j<NUMEVENTS; j++)
 	{
-		if (((TheTime - events[j].last) >= events[j].interval) && ((events[j].fifo->size_flag) && (events[j].fifo->dma_flag)) )  
+		//run usart transmit manager
+		if ( ((TheTime - events[j].last) >= events[j].interval) && (((*events[j].fifo->size_flag) ) && ((*events[j].fifo->dma_flag))) )  
 		{
+			//gpio_set(GPIOA, GPIO10);
 			events[j].function(events[j].fifo);
 			events[j].last = TheTime;
 		}
@@ -179,7 +189,7 @@ uint32_t FifoPut(volatile void *data, fifo_t *fifo, uint32_t length)
 		}
 
 		(*fifo->putPt) = *p++;
-		Sys_Signal(&fifo->size_flag);
+		Sys_Signal(fifo->size_flag);
 		//(*p)++;
 		fifo->putPt = &fifo->putPt[1]; // advance to next buffer byte
 
@@ -269,7 +279,7 @@ uint32_t FifoGet(volatile void *data, fifo_t *fifo, uint32_t length)
 			
 			//tmpTail++;
 			fifo->getPt = &fifo->getPt[1];
-			Sys_Wait(&fifo->size_flag);
+			Sys_Wait(fifo->size_flag);
 			//if (tmpTail == fifo->size)
 			if (fifo->getPt == &fifo->data[fifo->size])
 			{

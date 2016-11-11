@@ -8,6 +8,8 @@
 #define BUFFERSIZE 512
 extern int32_t SerTXSize;
 extern int32_t SerTXDMA;
+extern int32_t SerRXSize;
+extern int32_t SerRXDMA;
 typedef struct {
 	uint32_t data[BUFFERSIZE];
 	uint32_t *getPt;
@@ -15,9 +17,11 @@ typedef struct {
 	uint32_t size;
 	int32_t *dma_flag;
 	int32_t *size_flag;
+	int32_t *irq_flag;
 	void (*handler_function)(void *data, uint32_t length);
 } fifo_t;
 extern fifo_t SerTXFifo[1];
+extern fifo_t SerRXFifo[1];
 
 // Buffer management event table
 struct event_t {
@@ -92,6 +96,8 @@ extern uint32_t FifoGet(volatile void *data, fifo_t *fifo, uint32_t length);
 // transmit queue.
 // Inputs/Outputs: none
 void static qtx_manager(fifo_t *fifo);
+
+void static qrx_manager(fifo_t *fifo);
 
 void static dummy_event(void *foo);
 

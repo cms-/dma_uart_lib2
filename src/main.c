@@ -6,14 +6,14 @@
 int main(void)
 {
 
-	int i;
+	uint8_t i;
 	int j;
 
 	rcc_init();
 	gpio_init();
 	nvic_init();
-	uart_init();
 	dma_init();
+	uart_init();
 	Systick_Init();
 	//Uart_send("Hello",5);
 	/*
@@ -24,13 +24,17 @@ int main(void)
 	} // delay
 	*/
 	while (1) {
-		for (j=0; j<1000000; j++);
-		Uart_send("Hello",5);
+		for (j=0; j<10000000; j++);
+		//Uart_send("Hello",5);
 		
+		
+		//uint8_t i = usart_recv(USART1);
+		gpio_set(PORT_LED, PIN_LED);
 		for (j=0; j<1000000; j++);
-		Uart_send("Mexico",6);
+		//Uart_send("Mexico",6);
 		//usart_send_blocking(USART2, 'D');
 		//uart_send("Hello World!", 12);
+			//gpio_clear(PORT_LED, PIN_LED);
 
 	}
 
