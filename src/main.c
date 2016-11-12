@@ -14,8 +14,8 @@ int main(void)
 	nvic_init();
 	dma_init();
 	uart_init();
-	Systick_Init();
-	//Uart_send("Hello",5);
+	Sys_Init();
+	Uart_send("Hello",5);
 	/*
 	for (i=0; i<555555555; i++)
 	{
@@ -29,7 +29,7 @@ int main(void)
 		
 		
 		//uint8_t i = usart_recv(USART1);
-		gpio_set(PORT_LED, PIN_LED);
+		//gpio_set(PORT_LED, PIN_LED);
 		for (j=0; j<1000000; j++);
 		//Uart_send("Mexico",6);
 		//usart_send_blocking(USART2, 'D');

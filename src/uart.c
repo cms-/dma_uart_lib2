@@ -140,9 +140,9 @@ void usart1_isr(void)
     if (isr & USART_ISR_RXNE)
     //if (USART1_ISR &= USART_ISR_RXNE) {
     {
-    	//USART1_RQR |= USART_RQR_RXFRQ;
-    	uint8_t i = usart_recv(USART1);
-        gpio_clear(GPIOA, GPIO10);
+    	USART1_RQR |= USART_RQR_RXFRQ;
+    	//uint8_t i = usart_recv(USART1);
+        //gpio_clear(GPIOA, GPIO10);
     }
     if (isr &= USART_ISR_TXE) {
         //do_usart1_tx();
