@@ -126,9 +126,14 @@ void dma1_channel2_3_isr(void) {
 		Sys_Signal(&SerTXFifo->dma_flag);
 		
 	}
-	
-	//DMA1_IFCR |= DMA_IFCR_CTCIF3;
-	
+
+	if (isr & DMA_IFCR_TCIF3)
+	{
+		//gpio_toggle(GPIOA, GPIO10);
+		DMA1_IFCR |= DMA_IFCR_CTCIF3;	//Clear flag
+		dma_disable_channel(DMA1, DMA_CHANNEL3);
+		Sys_Signal(&SerRXFifo->dma_flag);
+	}
 
 }
 
@@ -140,7 +145,10 @@ void usart1_isr(void)
     if (isr & USART_ISR_RXNE)
     //if (USART1_ISR &= USART_ISR_RXNE) {
     {
+    	// incoming serial data
+    	// first clear the interupt and then signal the irq flag
     	USART1_RQR |= USART_RQR_RXFRQ;
+    	Sys_Signal(&SerRXFifo->irq_flag)
     	//uint8_t i = usart_recv(USART1);
         //gpio_clear(GPIOA, GPIO10);
     }

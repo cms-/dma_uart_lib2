@@ -1,7 +1,7 @@
 #include "systick.h"
 #include "uart.h"
 
-#define NUMEVENTS 1
+#define NUMEVENTS 3
 
 fifo_t SerTXFifo[1];
 int32_t SerTXIRQ;
@@ -65,7 +65,7 @@ void Sys_Init(void) {
 	// 48MHz 
 	systick_set_clocksource(STK_CSR_CLKSOURCE_AHB);
 
-	// 47000000/1000 = 47999 overflows per second - every 1ms one interrupt
+	// 48000000/1000 = 47999 overflows per second - every 1ms one interrupt
 	// SysTick interrupt every N clock pulses: set reload to N-1 
 	systick_set_reload(47999);
 
@@ -81,8 +81,8 @@ void Sys_Init(void) {
 	Sys_InitSema(&SerRXIRQ, 0);
 	FifoInit(SerRXFifo, BUFFERSIZE, &SerRXDMA, &SerRXSize, &SerRXIRQ, &uart_qrx_dma, FIFO_RX);
 	Sys_AddPeriodicEvent(&qtx_manager, 1000, SerTXFifo);
-	//Sys_AddPeriodicEvent(&qrx_manager, 1000, SerRXFifo);
-	//Sys_AddPeriodicEvent(&test_event, 100, SerTXFifo);
+	Sys_AddPeriodicEvent(&qrx_manager, 1000, SerRXFifo);
+	Sys_AddPeriodicEvent(&test_event, 100, SerRXFifo);
 	//Sys_AddPeriodicEvent(&dummy_event, 100000, &tmp, &tmp);
 }
 
@@ -151,13 +151,17 @@ void static run_periodic_events(void)
 	int j;
 	for (j=0; j<NUMEVENTS; j++)
 	{
-		//run usart transmit manager
-		if ( ((TheTime - events[j].last) >= events[j].interval) && (((*events[j].fifo->size_flag) ) && ((*events[j].fifo->dma_flag))) )  
+		if ((events[j].fifo->dir) == FIFO_RX) 
 		{
-			//gpio_set(GPIOA, GPIO10);
-			events[j].function(events[j].fifo);
-			events[j].last = TheTime;
+			//run transmit manager
+			if ( ((TheTime - events[j].last) >= events[j].interval) && (((*events[j].fifo->size_flag) ) && ((*events[j].fifo->dma_flag))) )  
+			{
+				//gpio_set(GPIOA, GPIO10);
+				events[j].function(events[j].fifo);
+				events[j].last = TheTime;
+			}			
 		}
+		// else check receive manager
 
 	}
 	TheTime++;
