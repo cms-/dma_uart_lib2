@@ -6,6 +6,7 @@
 #include <libopencm3/cm3/cortex.h>
 
 #define BUFFERSIZE 64
+#define WORDBYTES 4
 extern int32_t SerTXSize;
 extern int32_t SerTXDMA;
 extern int32_t SerTXIRQ;
@@ -23,14 +24,18 @@ typedef struct {
 	int32_t *size_flag;
 	int32_t *irq_flag;
 	fifo_direction_e dir;
-	void (*handler_function)(void *data, uint32_t length);
+	void (*handler_function)(volatile void *data, int length);
+	volatile uint8_t bufRcv[4];
+	//void(*handler)(volatile void*, int)
 } fifo_t;
 extern fifo_t SerTXFifo[1];
 extern fifo_t SerRXFifo[1];
+extern fifo_t TestingFifo[1];
+//extern volatile uint8_t BufRcv[4];
 
 // Buffer management event table
 struct event_t {
-	void(*function)(void *fifo); // manager function is called with reference to fifo being managed
+	void(*managerFunction)(fifo_t*); // manager function is called with reference to fifo being managed
 	fifo_t *fifo; // pointer to FIFO buffer
 	uint32_t interval; // how often the manager function will be called in microseconds
 	uint32_t last; // last executed
@@ -66,7 +71,7 @@ void Sys_Signal(int32_t *semaPt);
 //         period in milliseconds
 //         pointer to a fifo type
 // Outputs: nothing
-void Sys_AddPeriodicEvent(void(*function)(void*), uint32_t period_ms, fifo_t *fifo);
+void Sys_AddPeriodicEvent(void(*function)(fifo_t*), uint32_t period_ms, fifo_t *fifo);
 
 // ******* runPeriodicEvents *******
 // Runs periodic event scheduler
@@ -83,7 +88,7 @@ void static run_periodic_events(void);
 //		   pointer to a handler function (handler is called by qxx_manager)
 //		   direction enumerator FIFO_TX or FIFO_RX
 // Ouputs: None
-void FifoInit(fifo_t *fifo, uint32_t size, int32_t *dma_flag, int32_t *size_flag, int32_t *irq_flag, void(*handler)(void*), fifo_direction_e dir);
+void FifoInit(fifo_t *fifo, uint32_t size, int32_t *dma_flag, int32_t *size_flag, int32_t *irq_flag, void(*handler)(volatile void *data, int length), fifo_direction_e dir);
 
 // ******* FifoPut *******
 // Appends a length of data to a supplied buffer.

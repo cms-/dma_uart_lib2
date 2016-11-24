@@ -14,12 +14,16 @@ fifo_t SerRXFifo[1];
 int32_t SerRXSize;
 int32_t SerRXDMA;
 int32_t SerRXIRQ;
+fifo_t TestingFifo[1];
+int32_t TestingDMA;
+int32_t TestingSize;
 
 uint32_t TheTime = 0;
 
 eventType events[NUMEVENTS];
 
 int32_t tmp = 1;
+volatile uint8_t BufRcv[4];
 
 // ******* qtx_manager *******
 // Periodic event that manages transmit queue.
@@ -31,12 +35,16 @@ void static qtx_manager(fifo_t *fifo)
 	uint32_t len;
 	
 	if ((len = FifoGet(&buf, fifo, 1)))
+	//if (1)
 	{
-		Sys_Wait(&fifo->dma_flag);
+		
+		Sys_Wait(fifo->dma_flag);
 		//gpio_toggle(GPIOA, GPIO10); /* LED2 on/off */
 		//uart_qtx_dma(&buf, len); // fold this into fifo block
+		//gpio_set(GPIOA, GPIO10);
 		fifo->handler_function(&buf, len);
 		//FifoDelete(fifo, 1);
+
 	}
 }
 // ******* qrx_manager *******
@@ -45,7 +53,11 @@ void static qtx_manager(fifo_t *fifo)
 // Outputs: none
 void static qrx_manager(fifo_t *fifo)
 {
-
+	Sys_Wait(fifo->dma_flag);
+	//fifo->handler_function((uint32_t*)fifo->bufRcv, 1);
+	//gpio_set(GPIOA, GPIO10);
+	fifo->handler_function(&fifo->bufRcv, sizeof(fifo->bufRcv));
+	//gpio_toggle(GPIOA, GPIO10);
 }
 
 void static test_event(void *foo)
@@ -67,7 +79,7 @@ void Sys_Init(void) {
 
 	// 48000000/1000 = 47999 overflows per second - every 1ms one interrupt
 	// SysTick interrupt every N clock pulses: set reload to N-1 
-	systick_set_reload(47999);
+	systick_set_reload(4799);
 
 	systick_interrupt_enable();
 	// Start counting
@@ -76,13 +88,16 @@ void Sys_Init(void) {
 	Sys_InitSema(&SerTXSize, 0);
 	Sys_InitSema(&SerTXIRQ, 0);
 	FifoInit(SerTXFifo, BUFFERSIZE, &SerTXDMA, &SerTXSize, &SerTXIRQ, &uart_qtx_dma, FIFO_TX);
-	Sys_InitSema(&SerRXDMA, 1);
+	Sys_InitSema(&SerRXDMA, 0);
 	Sys_InitSema(&SerRXSize, 0);
 	Sys_InitSema(&SerRXIRQ, 0);
 	FifoInit(SerRXFifo, BUFFERSIZE, &SerRXDMA, &SerRXSize, &SerRXIRQ, &uart_qrx_dma, FIFO_RX);
-	Sys_AddPeriodicEvent(&qtx_manager, 1000, SerTXFifo);
-	Sys_AddPeriodicEvent(&qrx_manager, 1000, SerRXFifo);
-	Sys_AddPeriodicEvent(&test_event, 100, SerRXFifo);
+	Sys_InitSema(&TestingSize, 1);
+	Sys_InitSema(&TestingDMA, 1);
+	FifoInit(TestingFifo, BUFFERSIZE, &TestingDMA, &TestingSize, &SerTXIRQ, &uart_qtx_dma, FIFO_TX);
+	Sys_AddPeriodicEvent(&qtx_manager, 1, SerTXFifo);
+	Sys_AddPeriodicEvent(&qrx_manager, 1, SerRXFifo);
+	Sys_AddPeriodicEvent(&test_event, 1000, TestingFifo);
 	//Sys_AddPeriodicEvent(&dummy_event, 100000, &tmp, &tmp);
 }
 
@@ -126,14 +141,14 @@ void Sys_Signal(int32_t *semaPt)
 //         period in milliseconds
 //         pointer to a fifo type
 // Outputs: nothing
-void Sys_AddPeriodicEvent(void(*function)(void*), uint32_t period_ms, fifo_t *fifo)
+void Sys_AddPeriodicEvent(void(*function)(fifo_t*), uint32_t period_ms, fifo_t *fifo)
 {
 	int j;
 	for (j=0; j<NUMEVENTS; j++)
 	{
-		if (!events[j].function)
+		if (!events[j].managerFunction)
 		{
-			events[j].function = (function);
+			events[j].managerFunction = function;
 			events[j].interval = period_ms;
 			events[j].last = 0;
 			events[j].fifo = fifo;
@@ -143,7 +158,7 @@ void Sys_AddPeriodicEvent(void(*function)(void*), uint32_t period_ms, fifo_t *fi
 }
 
 // ******* runPeriodicEvents *******
-// Runs periodic event scheduler
+// Runs periodic event scheduler - temporary stand-in
 // Inputs/Outputs: none
 void static run_periodic_events(void)
 {
@@ -151,18 +166,44 @@ void static run_periodic_events(void)
 	int j;
 	for (j=0; j<NUMEVENTS; j++)
 	{
-		if ((events[j].fifo->dir) == FIFO_RX) 
+
+		if ((events[j].fifo->dir) == FIFO_TX) 
 		{
-			//run transmit manager
-			if ( ((TheTime - events[j].last) >= events[j].interval) && (((*events[j].fifo->size_flag) ) && ((*events[j].fifo->dma_flag))) )  
+			
+			//if: reception conditions are true (at or past interval delta, fifo size > 0, dma_flag not busy), run transmit manager
+			if ( ((TheTime - events[j].last) >= events[j].interval) && ((*events[j].fifo->size_flag) && (*events[j].fifo->dma_flag)) )  
 			{
 				//gpio_set(GPIOA, GPIO10);
-				events[j].function(events[j].fifo);
+				//gpio_toggle(GPIOA, GPIO10);
+				events[j].managerFunction(events[j].fifo);
 				events[j].last = TheTime;
 			}			
 		}
-		// else check receive manager
+		// else: check receive manager conditions (at or past interval delta, rx irq has fired, dma_flag not busy) and run if needed
+		else
+		{
+			
+			if ((*events[j].fifo->dma_flag > 0))
+				// here a positive dma flag indicates a fresh BufRcv to be added
+			{
+				
+				FifoPut(&events[j].fifo->bufRcv, events[j].fifo, sizeof(events[j].fifo->bufRcv));
+				//FifoPut(&BufRcv, events[j].fifo, WORDBYTES);
+				Sys_Wait(events[j].fifo->dma_flag);
+				gpio_set(GPIOA, GPIO10);
+			}
+			
+			if ( ((TheTime - events[j].last) >= events[j].interval) && ((*events[j].fifo->irq_flag > 0) && (*events[j].fifo->dma_flag == 0)) )
+			{
+				// RXNE interrupt has fired and there are no dma actions happening, so run the manager
+				gpio_set(GPIOA, GPIO10);
+				Sys_Wait(events[j].fifo->irq_flag);
+				events[j].managerFunction(events[j].fifo);
+				events[j].last = TheTime;
+			}
 
+
+		}
 	}
 	TheTime++;
 	cm_enable_interrupts();
@@ -178,7 +219,7 @@ void static run_periodic_events(void)
 //		   pointer to a handler function (handler is called by qxx_manager)
 //		   direction enumerator FIFO_TX or FIFO_RX
 // Ouputs: None
-void FifoInit(fifo_t *fifo, uint32_t size, int32_t *dma_flag, int32_t *size_flag, int32_t *irq_flag, void(*handler)(void*), fifo_direction_e dir)
+void FifoInit(fifo_t *fifo, uint32_t size, int32_t *dma_flag, int32_t *size_flag, int32_t *irq_flag, void(*handler)(volatile void *data, int length), fifo_direction_e dir)
 {
 	//fifo->data = &data;
 	fifo->getPt = (uint32_t*)&fifo->data[0];
@@ -188,8 +229,9 @@ void FifoInit(fifo_t *fifo, uint32_t size, int32_t *dma_flag, int32_t *size_flag
 	fifo->dma_flag = dma_flag;
 	fifo->size_flag = size_flag;
 	fifo->irq_flag = irq_flag;
-	fifo->handler_function = (handler);
+	fifo->handler_function = handler;
 	fifo->dir = dir;
+	//fifo->bufRcv = 0x30;
 
 }
 

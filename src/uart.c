@@ -39,6 +39,8 @@ void uart_qtx_dma(volatile void *data, int length)
 // Outputs: none
 void uart_qrx_dma(volatile void *data, int length)
 {
+	//gpio_toggle(GPIOA, GPIO10);
+
 	dma_disable_channel(DMA1, DMA_CHANNEL3);
 
 	//dma_disable_transfer_complete_interrupt(DMA1, DMA_CHANNEL5);
@@ -49,22 +51,36 @@ void uart_qrx_dma(volatile void *data, int length)
 	dma_enable_channel(DMA1, DMA_CHANNEL3);
 	dma_enable_transfer_complete_interrupt(DMA1, DMA_CHANNEL3);
 	usart_enable_rx_dma(USART1);
+
 }
 
 void rcc_init() {
 	rcc_clock_setup_in_hsi_out_48mhz();
 	rcc_periph_clock_enable(RCC_USART1);
 	rcc_periph_clock_enable(RCC_GPIOA);
+	rcc_periph_clock_enable(RCC_GPIOF);
 	//rcc_periph_clock_enable(RCC_AFIO);
 	rcc_periph_clock_enable(RCC_DMA);
 }
 
 void gpio_init() {
+	
 	gpio_mode_setup(GPIOA, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, GPIO10);
 
+	// Photores power blocking line & signal input
+	gpio_mode_setup(GPIOF, GPIO_MODE_OUTPUT, GPIO_PUPD_NONE, GPIO1);
+	//gpio_mode_setup(GPIOA, GPIO_MODE_INPUT, GPIO_PUPD_NONE, GPIO1);
+	
+	// usart lines
 	gpio_mode_setup(GPIOA, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO2);
 	gpio_mode_setup(GPIOA, GPIO_MODE_AF, GPIO_PUPD_NONE, GPIO3);
 	gpio_set_af(GPIOA, GPIO_AF1, GPIO2|GPIO3);
+	/*
+	// SPI software
+	gpio_mode_setup(SPI_PORT, GPIO_MODE_OUTPUT, GPIO_PUPD_PULLUP, CE|CSN|SCK|MOSI);
+	gpio_set_output_options(SPI_PORT, GPIO_OTYPE_PP, GPIO_OSPEED_2MHZ, CE|CSN|SCK|MOSI);
+	gpio_mode_setup(SPI_PORT, GPIO_MODE_INPUT, GPIO_PUPD_NONE, MISO);
+	*/
 }
 
 void uart_init() {
@@ -90,11 +106,12 @@ void dma_init() {
 	dma_enable_memory_increment_mode(DMA1, DMA_CHANNEL2);
 	dma_set_peripheral_size(DMA1, DMA_CHANNEL2, DMA_CCR_PSIZE_8BIT);
 	dma_set_memory_size(DMA1, DMA_CHANNEL2, DMA_CCR_MSIZE_8BIT);
-	dma_set_priority(DMA1, DMA_CHANNEL2, DMA_CCR_PL_VERY_HIGH);
+	dma_set_priority(DMA1, DMA_CHANNEL2, DMA_CCR_PL_HIGH);
 	
 	dma_channel_reset(DMA1, DMA_CHANNEL3);
-	dma_set_peripheral_address(DMA1, DMA_CHANNEL3, (uint32_t) &USART1_RDR);
 	dma_set_read_from_peripheral(DMA1, DMA_CHANNEL3);
+	dma_set_peripheral_address(DMA1, DMA_CHANNEL3, (uint32_t) &USART1_RDR);
+	
 	dma_enable_memory_increment_mode(DMA1, DMA_CHANNEL3);
 	dma_set_peripheral_size(DMA1, DMA_CHANNEL3, DMA_CCR_PSIZE_8BIT);
 	dma_set_memory_size(DMA1, DMA_CHANNEL3, DMA_CCR_MSIZE_8BIT);
@@ -117,22 +134,33 @@ void dma1_channel2_3_isr(void) {
 	uint32_t isr = DMA1_ISR;
 	//uart_qtx_dma(&isr, 4);
 	//gpio_toggle(GPIOA, GPIO10); /* LED2 on/off */
+	//gpio_set(GPIOA, GPIO10);
 	//if (isr & (1 << 5))
 	if (isr & DMA_ISR_TCIF2)
 	{
 		//gpio_toggle(GPIOA, GPIO10); /* LED2 on/off */
 		DMA1_IFCR |= DMA_IFCR_CTCIF2;	//Clear flag
-		dma_disable_channel(DMA1, DMA_CHANNEL2);
-		Sys_Signal(&SerTXFifo->dma_flag);
+		//dma_channel_reset(DMA1, DMA_CHANNEL2);
+		Sys_Signal(SerTXFifo->dma_flag);
 		
 	}
 
-	if (isr & DMA_IFCR_TCIF3)
+	if (isr & DMA_ISR_TCIF3)
 	{
+		//Sys_Signal(SerRXFifo->dma_flag);
+		//Sys_Wait(SerRXFifo->irq_flag);
 		//gpio_toggle(GPIOA, GPIO10);
 		DMA1_IFCR |= DMA_IFCR_CTCIF3;	//Clear flag
-		dma_disable_channel(DMA1, DMA_CHANNEL3);
-		Sys_Signal(&SerRXFifo->dma_flag);
+		//usart_disable_rx_dma(USART1);
+		//dma_channel_reset(DMA1, DMA_CHANNEL3);
+		gpio_toggle(GPIOA, GPIO10);
+		//FifoPut(&BufRcv, SerRXFifo, WORDBYTES);
+		Sys_Signal(SerRXFifo->dma_flag);
+		Sys_Signal(SerRXFifo->dma_flag);
+		//Sys_Signal(SerRXFifo->dma_flag);
+		//gpio_toggle(GPIOA, GPIO10);
+
+		
 	}
 
 }
@@ -145,14 +173,24 @@ void usart1_isr(void)
     if (isr & USART_ISR_RXNE)
     //if (USART1_ISR &= USART_ISR_RXNE) {
     {
+    	USART1_RQR |= USART_RQR_RXFRQ;
+    	//uint32_t buf = 0;
+    	//uint32_t *out;
+    	int i;
+    	//uart_receive(&buf, 1);
+    	//for (i=0; i<1000; i++);
+    	//dma_disable_channel(DMA1, DMA_CHANNEL3);
+    	//out = buf;
+    	
     	// incoming serial data
     	// first clear the interupt and then signal the irq flag
-    	USART1_RQR |= USART_RQR_RXFRQ;
-    	Sys_Signal(&SerRXFifo->irq_flag)
+    	
+
+    	Sys_Signal(SerRXFifo->irq_flag);
     	//uint8_t i = usart_recv(USART1);
-        //gpio_clear(GPIOA, GPIO10);
+        //gpio_toggle(GPIOA, GPIO10);
     }
-    if (isr &= USART_ISR_TXE) {
+    if (isr & USART_ISR_TXE) {
         //do_usart1_tx();
         //gpio_set(GPIOA, GPIO10);
     }
