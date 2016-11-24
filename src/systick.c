@@ -87,14 +87,14 @@ void Sys_Init(void) {
 	Sys_InitSema(&SerTXDMA, 1);
 	Sys_InitSema(&SerTXSize, 0);
 	Sys_InitSema(&SerTXIRQ, 0);
-	FifoInit(SerTXFifo, BUFFERSIZE, &SerTXDMA, &SerTXSize, &SerTXIRQ, &uart_qtx_dma, FIFO_TX);
+	FifoInit(SerTXFifo, &SerTXDMA, &SerTXSize, &SerTXIRQ, &uart_qtx_dma, FIFO_TX);
 	Sys_InitSema(&SerRXDMA, 0);
 	Sys_InitSema(&SerRXSize, 0);
 	Sys_InitSema(&SerRXIRQ, 0);
-	FifoInit(SerRXFifo, BUFFERSIZE, &SerRXDMA, &SerRXSize, &SerRXIRQ, &uart_qrx_dma, FIFO_RX);
+	FifoInit(SerRXFifo, &SerRXDMA, &SerRXSize, &SerRXIRQ, &uart_qrx_dma, FIFO_RX);
 	Sys_InitSema(&TestingSize, 1);
 	Sys_InitSema(&TestingDMA, 1);
-	FifoInit(TestingFifo, BUFFERSIZE, &TestingDMA, &TestingSize, &SerTXIRQ, &uart_qtx_dma, FIFO_TX);
+	FifoInit(TestingFifo, &TestingDMA, &TestingSize, &SerTXIRQ, &uart_qtx_dma, FIFO_TX);
 	Sys_AddPeriodicEvent(&qtx_manager, 1, SerTXFifo);
 	Sys_AddPeriodicEvent(&qrx_manager, 1, SerRXFifo);
 	Sys_AddPeriodicEvent(&test_event, 1000, TestingFifo);
@@ -219,12 +219,11 @@ void static run_periodic_events(void)
 //		   pointer to a handler function (handler is called by qxx_manager)
 //		   direction enumerator FIFO_TX or FIFO_RX
 // Ouputs: None
-void FifoInit(fifo_t *fifo, uint32_t size, int32_t *dma_flag, int32_t *size_flag, int32_t *irq_flag, void(*handler)(volatile void *data, int length), fifo_direction_e dir)
+void FifoInit(fifo_t *fifo, int32_t *dma_flag, int32_t *size_flag, int32_t *irq_flag, void(*handler)(volatile void *data, int length), fifo_direction_e dir)
 {
 	//fifo->data = &data;
 	fifo->getPt = (uint32_t*)&fifo->data[0];
 	fifo->putPt = (uint32_t*)&fifo->data[0];
-	fifo->size = size;
 	
 	fifo->dma_flag = dma_flag;
 	fifo->size_flag = size_flag;
@@ -253,7 +252,8 @@ uint32_t FifoPut(volatile void *data, fifo_t *fifo, uint32_t length)
 		// Check to see if there's space in the buffer
 		// full if advancing the putPt to the next element in the buffer is met with the getPt
 		// also check for this condition when we reach the buffer length.
-		if (nextPutPt == &fifo->data[fifo->size]) 
+		//if (nextPutPt == &fifo->data[fifo->size]) 
+		if (nextPutPt == &fifo->data[BUFFERSIZE]) 
 		{
 			nextPutPt = &fifo->data[0];
 		}
@@ -269,7 +269,7 @@ uint32_t FifoPut(volatile void *data, fifo_t *fifo, uint32_t length)
 		fifo->putPt = &fifo->putPt[1]; // advance to next buffer byte
 
 		// if we reach the buffer size, then wrap the putPt
-		if (fifo->putPt == &fifo->data[fifo->size])
+		if (fifo->putPt == &fifo->data[BUFFERSIZE])
 			{
 				//gpio_set(GPIOA, GPIO10);
 				fifo->putPt = &fifo->data[0];
@@ -359,7 +359,7 @@ uint32_t FifoGet(volatile void *data, fifo_t *fifo, uint32_t length)
 			fifo->getPt = &fifo->getPt[1];
 			Sys_Wait(fifo->size_flag);
 			//if (tmpTail == fifo->size)
-			if (fifo->getPt == &fifo->data[fifo->size])
+			if (fifo->getPt == &fifo->data[BUFFERSIZE])
 			{
 				fifo->getPt = &fifo->data[0];
 			}

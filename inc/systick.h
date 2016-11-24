@@ -88,7 +88,7 @@ void static run_periodic_events(void);
 //		   pointer to a handler function (handler is called by qxx_manager)
 //		   direction enumerator FIFO_TX or FIFO_RX
 // Ouputs: None
-void FifoInit(fifo_t *fifo, uint32_t size, int32_t *dma_flag, int32_t *size_flag, int32_t *irq_flag, void(*handler)(volatile void *data, int length), fifo_direction_e dir);
+void FifoInit(fifo_t *fifo, int32_t *dma_flag, int32_t *size_flag, int32_t *irq_flag, void(*handler)(volatile void *data, int length), fifo_direction_e dir);
 
 // ******* FifoPut *******
 // Appends a length of data to a supplied buffer.
